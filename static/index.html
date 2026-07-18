@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AeroSense — Air Quality Prediction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sky-deep:#0B1B2B;
+    --sky-deeper:#071320;
+    --sky-clear:#4FB4E8;
+    --sky-clear-soft:#8ED2F0;
+    --haze-amber:#E2A03F;
+    --smog-red:#D6584A;
+    --mist:#EDF3F6;
+    --mist-dim:#A9BCC9;
+    --panel:#122334;
+    --panel-hi:#17293B;
+    --line:rgba(237,243,246,0.10);
+    --line-strong:rgba(237,243,246,0.18);
+    --particle-op:1;
+    --radius:14px;
+    --display:'Space Grotesk',sans-serif;
+    --body:'Inter',sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+  html[data-theme="light"]{
+    --sky-deep:#F1F6F9;
+    --sky-deeper:#E3ECF1;
+    --sky-clear:#1C86C4;
+    --sky-clear-soft:#0B5F91;
+    --haze-amber:#B8791F;
+    --smog-red:#B23D30;
+    --mist:#0D1E2B;
+    --mist-dim:#4C6373;
+    --panel:#FFFFFF;
+    --panel-hi:#EAF1F5;
+    --line:rgba(13,30,43,0.08);
+    --line-strong:rgba(13,30,43,0.15);
+    --particle-op:0.55;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto;}
+    *{animation-duration:0.001ms !important;animation-iteration-count:1 !important;transition-duration:0.001ms !important;}
+  }
+  body{
+    background:var(--sky-deep);
+    color:var(--mist);
+    font-family:var(--body);
+    line-height:1.5;
+    overflow-x:hidden;
+    transition:background .5s ease, color .5s ease;
+  }
+  a{color:inherit;text-decoration:none;}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 32px;}
+  ::selection{background:var(--sky-clear);color:var(--sky-deeper);}
+
+  .grain{position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.035;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* ---------- NAV ---------- */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    padding:22px 0;
+    transition:background .4s ease, padding .4s ease, border-color .4s ease;
+    border-bottom:1px solid transparent;
+  }
+  header.scrolled{
+    background:color-mix(in srgb, var(--sky-deeper) 82%, transparent);
+    backdrop-filter:blur(14px);
+    padding:14px 0;
+    border-bottom:1px solid var(--line);
+  }
+  nav.wrap{display:flex;align-items:center;justify-content:space-between;gap:20px;}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:.01em;}
+  .brand-mark{width:10px;height:10px;border-radius:50%;background:var(--sky-clear);box-shadow:0 0 12px 3px var(--sky-clear);}
+  .nav-links{display:flex;gap:30px;font-size:14px;color:var(--mist-dim);}
+  .nav-links a{transition:color .2s ease;}
+  .nav-links a:hover{color:var(--mist);}
+  .nav-right{display:flex;align-items:center;gap:14px;}
+  .nav-cta{
+    font-size:13px;font-weight:600;padding:9px 18px;border-radius:999px;
+    border:1px solid var(--line-strong);color:var(--mist);white-space:nowrap;
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .nav-cta:hover{border-color:var(--sky-clear);background:color-mix(in srgb, var(--sky-clear) 8%, transparent);}
+  .theme-toggle{
+    width:38px;height:38px;border-radius:50%;border:1px solid var(--line-strong);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;background:transparent;
+    transition:border-color .2s ease, transform .3s ease;
+    flex-shrink:0;
+  }
+  .theme-toggle:hover{border-color:var(--sky-clear);transform:rotate(20deg);}
+  .theme-toggle svg{width:17px;height:17px;stroke:var(--mist);}
+  @media(max-width:760px){.nav-links{display:none;}}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative;
+    min-height:100vh;
+    display:flex;flex-direction:column;justify-content:center;
+    overflow:hidden;
+    padding-top:80px;
+  }
+  #atmosphere{position:absolute;inset:0;width:100%;height:100%;display:block;opacity:var(--particle-op);transition:opacity .5s ease;}
+  .hero-veil{
+    position:absolute;inset:0;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--sky-deeper) 15%, transparent) 0%, color-mix(in srgb, var(--sky-deeper) 55%, transparent) 70%, var(--sky-deep) 100%);
+    pointer-events:none;
+  }
+  .hero-inner{position:relative;z-index:2;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--sky-clear-soft);
+    border:1px solid var(--line-strong);
+    padding:6px 14px;border-radius:999px;
+    margin-bottom:28px;
+    opacity:0;animation:fadeUp .8s ease forwards .1s;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--sky-clear);animation:pulse 2s ease-in-out infinite;}
+  h1.headline{
+    font-family:var(--display);
+    font-weight:700;
+    font-size:clamp(40px,7vw,84px);
+    line-height:1.02;
+    letter-spacing:-0.02em;
+    max-width:900px;
+  }
+  h1.headline .line{display:block;overflow:hidden;}
+  h1.headline .line span{display:inline-block;opacity:0;transform:translateY(110%);animation:lineUp .9s cubic-bezier(.22,1,.36,1) forwards;}
+  h1.headline .line:nth-child(1) span{animation-delay:.22s;}
+  h1.headline .line:nth-child(2) span{animation-delay:.36s;}
+  h1.headline .accent{color:var(--sky-clear);}
+  .sub{
+    margin-top:26px;max-width:560px;font-size:18px;color:var(--mist-dim);
+    opacity:0;animation:fadeUp .8s ease forwards .6s;
+  }
+  .hero-cta{margin-top:40px;display:flex;gap:16px;flex-wrap:wrap;opacity:0;animation:fadeUp .8s ease forwards .78s;}
+  .btn{
+    font-family:var(--body);font-weight:600;font-size:14.5px;
+    padding:14px 26px;border-radius:10px;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:transform .25s ease, box-shadow .25s ease, background .25s ease;
+  }
+  .btn-primary{background:var(--sky-clear);color:var(--sky-deeper);}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 30px -8px color-mix(in srgb, var(--sky-clear) 55%, transparent);}
+  .btn-ghost{border:1px solid var(--line-strong);color:var(--mist);}
+  .btn-ghost:hover{border-color:var(--mist-dim);transform:translateY(-2px);}
+  .hero-readout{
+    position:absolute;right:32px;bottom:40px;z-index:2;
+    font-family:var(--mono);font-size:12px;color:var(--mist-dim);
+    text-align:right;opacity:0;animation:fadeUp .8s ease forwards 1s;
+  }
+  .hero-readout .val{font-size:28px;color:var(--mist);font-weight:600;display:block;transition:color .5s ease;}
+  @media(max-width:640px){.hero-readout{display:none;}}
+  .scroll-cue{
+    position:absolute;left:32px;bottom:40px;z-index:2;
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mist-dim);
+    display:flex;align-items:center;gap:10px;
+    opacity:0;animation:fadeUp .8s ease forwards 1.1s;
+  }
+  .scroll-cue .bar{width:1px;height:34px;background:linear-gradient(var(--sky-clear),transparent);animation:scrollBar 1.8s ease-in-out infinite;}
+
+  @keyframes lineUp{to{opacity:1;transform:translateY(0);}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+  @keyframes scrollBar{0%{transform:scaleY(0);transform-origin:top;}45%{transform:scaleY(1);transform-origin:top;}55%{transform:scaleY(1);transform-origin:bottom;}100%{transform:scaleY(0);transform-origin:bottom;}}
+
+  /* ---------- REVEAL ---------- */
+  .reveal{opacity:0;transform:translateY(28px);transition:opacity .8s cubic-bezier(.22,1,.36,1), transform .8s cubic-bezier(.22,1,.36,1);}
+  .reveal.in{opacity:1;transform:translateY(0);}
+
+  /* ---------- SECTION SHARED ---------- */
+  section{position:relative;padding:120px 0;}
+  .section-head{max-width:640px;margin-bottom:64px;}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--sky-clear-soft);margin-bottom:14px;}
+  h2{font-family:var(--display);font-weight:600;font-size:clamp(28px,4vw,42px);letter-spacing:-.01em;}
+  .section-head p{margin-top:16px;color:var(--mist-dim);font-size:16px;max-width:520px;}
+
+  /* ---------- PIPELINE ---------- */
+  .pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+  .pipe-step{background:var(--panel);padding:34px 26px;position:relative;transition:background .3s ease;}
+  .pipe-step:hover{background:var(--panel-hi);}
+  .pipe-icon{width:30px;height:30px;stroke:var(--sky-clear);fill:none;stroke-width:1.5;}
+  .pipe-num{font-family:var(--mono);font-size:12px;color:var(--sky-clear-soft);margin-top:16px;}
+  .pipe-title{font-family:var(--display);font-size:19px;font-weight:600;margin-top:10px;}
+  .pipe-desc{font-size:14px;color:var(--mist-dim);margin-top:10px;}
+  .pipe-step::after{
+    content:"";position:absolute;top:50%;right:-1px;transform:translateY(-50%);
+    width:6px;height:6px;border-radius:50%;background:var(--sky-clear);
+    box-shadow:0 0 0 3px var(--panel);z-index:2;
+  }
+  .pipe-step:last-child::after{display:none;}
+  @media(max-width:860px){.pipeline{grid-template-columns:1fr;}.pipe-step::after{display:none;}}
+
+  /* ---------- THEORY ---------- */
+  .theory-intro{
+    background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--radius);
+    padding:36px 40px;margin-bottom:40px;font-size:15.5px;color:var(--mist-dim);line-height:1.7;
+  }
+  .theory-intro strong{color:var(--mist);font-weight:600;}
+  .pollutant-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:40px;}
+  .p-card{background:var(--panel);padding:26px 24px;transition:background .3s ease;}
+  .p-card:hover{background:var(--panel-hi);}
+  .p-card .tag{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--sky-clear-soft);}
+  .p-card .desc{font-size:13.5px;color:var(--mist-dim);margin-top:10px;line-height:1.6;}
+  @media(max-width:860px){.pollutant-grid{grid-template-columns:1fr 1fr;}}
+  @media(max-width:560px){.pollutant-grid{grid-template-columns:1fr;}}
+
+  .scale-strip{display:flex;border-radius:10px;overflow:hidden;border:1px solid var(--line-strong);}
+  .scale-seg{flex:1;padding:14px 16px;font-family:var(--mono);font-size:11.5px;color:var(--sky-deeper);}
+  .scale-seg .r{opacity:.75;display:block;margin-top:2px;}
+  .scale-seg.good{background:var(--sky-clear);}
+  .scale-seg.mod{background:var(--sky-clear-soft);}
+  .scale-seg.unh{background:var(--haze-amber);}
+  .scale-seg.haz{background:var(--smog-red);color:#fff;}
+
+  /* ---------- DEMO ---------- */
+  .demo-panel{
+    display:grid;grid-template-columns:1.05fr .95fr;gap:0;
+    border:1px solid var(--line-strong);border-radius:var(--radius);overflow:hidden;
+    background:var(--panel);
+  }
+  .demo-controls{padding:44px;border-right:1px solid var(--line);}
+  .demo-visual{padding:44px;background:var(--panel-hi);display:flex;flex-direction:column;justify-content:space-between;position:relative;}
+  @media(max-width:900px){.demo-panel{grid-template-columns:1fr;}.demo-controls{border-right:none;border-bottom:1px solid var(--line);}}
+
+  .field{margin-bottom:26px;}
+  .field-label{
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-size:13.5px;font-weight:500;margin-bottom:10px;color:var(--mist);
+  }
+  .field-label .unit{color:var(--mist-dim);font-size:11.5px;}
+  .field-label .field-val{font-family:var(--mono);color:var(--sky-clear-soft);font-size:13px;}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:4px;border-radius:2px;
+    background:linear-gradient(90deg,var(--sky-clear) 0%,var(--sky-clear) var(--fill,50%),var(--line-strong) var(--fill,50%));
+    outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:var(--mist);border:3px solid var(--sky-clear);cursor:pointer;
+    transition:transform .15s ease;
+  }
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15);}
+  input[type=range]::-moz-range-thumb{
+    width:16px;height:16px;border-radius:50%;background:var(--mist);border:3px solid var(--sky-clear);cursor:pointer;
+  }
+
+  .predict-btn{
+    width:100%;margin-top:8px;
+    background:var(--sky-clear);color:var(--sky-deeper);
+    font-family:var(--body);font-weight:600;font-size:15px;
+    padding:16px;border-radius:10px;border:none;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    transition:transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+  }
+  .predict-btn:hover{transform:translateY(-2px);box-shadow:0 10px 30px -8px color-mix(in srgb, var(--sky-clear) 55%, transparent);}
+  .predict-btn:disabled{opacity:.6;cursor:progress;transform:none;}
+  .spinner{width:14px;height:14px;border-radius:50%;border:2px solid color-mix(in srgb, var(--sky-deeper) 30%, transparent);border-top-color:var(--sky-deeper);animation:spin .7s linear infinite;display:none;}
+  .predict-btn.loading .spinner{display:inline-block;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .api-note{margin-top:16px;font-size:12px;color:var(--mist-dim);font-family:var(--mono);}
+  .api-note.err{color:var(--smog-red);}
+
+  .gauge-wrap{display:flex;flex-direction:column;align-items:center;}
+  .gauge{width:220px;height:220px;position:relative;}
+  .gauge svg{width:100%;height:100%;transform:rotate(-90deg);}
+  .gauge-num{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  .gauge-num .n{font-family:var(--mono);font-weight:600;font-size:44px;transition:color .5s ease;}
+  .gauge-num .l{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mist-dim);margin-top:4px;}
+  .gauge-cat{
+    margin-top:22px;font-family:var(--display);font-weight:600;font-size:20px;
+    padding:8px 20px;border-radius:999px;border:1px solid var(--line-strong);
+    transition:color .5s ease, border-color .5s ease;
+  }
+  .legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:24px;}
+  .legend span{font-family:var(--mono);font-size:10.5px;color:var(--mist-dim);display:flex;align-items:center;gap:6px;}
+  .legend i{width:8px;height:8px;border-radius:50%;display:inline-block;}
+
+  /* ---------- STATS ---------- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:70px;}
+  .stat{background:var(--panel);padding:36px 28px;}
+  .stat .n{font-family:var(--display);font-size:clamp(30px,3.4vw,44px);font-weight:700;color:var(--sky-clear-soft);}
+  .stat .l{font-size:13px;color:var(--mist-dim);margin-top:8px;}
+  @media(max-width:760px){.stats{grid-template-columns:1fr 1fr;}}
+
+  .importance{display:flex;flex-direction:column;gap:16px;}
+  .imp-row{display:grid;grid-template-columns:110px 1fr 54px;align-items:center;gap:16px;}
+  .imp-row .name{font-family:var(--mono);font-size:13px;color:var(--mist-dim);}
+  .imp-track{height:8px;border-radius:4px;background:var(--line);overflow:hidden;}
+  .imp-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--sky-clear),var(--sky-clear-soft));width:0;transition:width 1.1s cubic-bezier(.22,1,.36,1);}
+  .imp-row .pct{font-family:var(--mono);font-size:12px;color:var(--mist-dim);text-align:right;}
+  .imp-note{margin-top:22px;font-size:12.5px;color:var(--mist-dim);}
+
+  /* ---------- STACK ---------- */
+  .stack-strip{display:flex;flex-wrap:wrap;gap:14px;}
+  .stack-chip{
+    font-family:var(--mono);font-size:13px;color:var(--mist-dim);
+    border:1px solid var(--line-strong);border-radius:999px;padding:10px 18px;
+    transition:color .2s ease, border-color .2s ease;
+  }
+  .stack-chip:hover{color:var(--mist);border-color:var(--sky-clear);}
+
+  /* ---------- FOOTER ---------- */
+  footer{border-top:1px solid var(--line);padding:56px 0 40px;}
+  .footer-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px;}
+  .footer-row .brand{font-size:16px;}
+  footer .links{display:flex;gap:24px;font-size:13px;color:var(--mist-dim);}
+  footer .links a:hover{color:var(--mist);}
+  footer .fine{margin-top:28px;font-size:12px;color:var(--mist-dim);font-family:var(--mono);}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<header id="siteHeader">
+  <nav class="wrap">
+    <div class="brand"><span class="brand-mark"></span>AeroSense</div>
+    <div class="nav-links">
+      <a href="#pipeline">Pipeline</a>
+      <a href="#theory">Theory</a>
+      <a href="#demo">Live Demo</a>
+      <a href="#performance">Performance</a>
+    </div>
+    <div class="nav-right">
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark mode" title="Toggle theme">
+        <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></svg>
+      </button>
+      <a class="nav-cta" href="#demo">Try the model</a>
+    </div>
+  </nav>
+</header>
+
+<section class="hero">
+  <canvas id="atmosphere"></canvas>
+  <div class="hero-veil"></div>
+  <div class="wrap hero-inner">
+    <div class="eyebrow"><span class="dot"></span>Random Forest Regressor · R² 0.94</div>
+    <h1 class="headline">
+      <span class="line"><span>Six pollutants.</span></span>
+      <span class="line"><span>One <span class="accent">air quality</span> number.</span></span>
+    </h1>
+    <p class="sub">AeroSense turns raw PM2.5, PM10, NO₂, SO₂, CO and O₃ readings into a live AQI prediction, using an ensemble model trained on historical pollution data.</p>
+    <div class="hero-cta">
+      <a href="#demo" class="btn btn-primary">Run a live prediction →</a>
+      <a href="#theory" class="btn btn-ghost">How it works</a>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="bar"></div>Scroll</div>
+  <div class="hero-readout">
+    <span class="l">Ambient AQI (demo)</span>
+    <span class="val" id="ambientReadout">42</span>
+  </div>
+</section>
+
+<section id="pipeline">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">The Pipeline</div>
+      <h2>From raw sensor data to a served prediction</h2>
+      <p>The four stages that turn a table of pollutant readings into a number an application can request over HTTP.</p>
+    </div>
+    <div class="pipeline reveal">
+      <div class="pipe-step">
+        <svg class="pipe-icon" viewBox="0 0 24 24"><path d="M12 2 5 8v6c0 5 3 8 7 8s7-3 7-8V8l-7-6Z"/><path d="M9 13c1 2 5 2 6 0"/></svg>
+        <div class="pipe-num">01</div><div class="pipe-title">Clean & prepare</div><div class="pipe-desc">Handle missing readings, align timestamps, and normalize pollutant units across the dataset.</div>
+      </div>
+      <div class="pipe-step">
+        <svg class="pipe-icon" viewBox="0 0 24 24"><path d="M4 19V9M11 19V5M18 19v-7"/><path d="M2 19h20"/></svg>
+        <div class="pipe-num">02</div><div class="pipe-title">Explore & select</div><div class="pipe-desc">EDA surfaces correlations between PM2.5, PM10, NO₂, SO₂, CO, O₃ and the AQI target.</div>
+      </div>
+      <div class="pipe-step">
+        <svg class="pipe-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
+        <div class="pipe-num">03</div><div class="pipe-title">Train & evaluate</div><div class="pipe-desc">A Random Forest Regressor is fit across many decision trees and validated on a held-out split.</div>
+      </div>
+      <div class="pipe-step">
+        <svg class="pipe-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>
+        <div class="pipe-num">04</div><div class="pipe-title">Serve a prediction</div><div class="pipe-desc">The trained model loads into a small prediction API, with input validation baked in.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="theory">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">The Theory</div>
+      <h2>What's actually happening under the hood</h2>
+      <p>A short primer on the model and the pollutants it reasons about.</p>
+    </div>
+
+    <div class="theory-intro reveal">
+      A <strong>Random Forest</strong> is an ensemble of many decision trees, each trained on a random subset of the data and a random subset of features. Every tree makes its own AQI guess from the six pollutant readings; the forest's final prediction is the <strong>average across all of them</strong>. That averaging is what makes it work well here: pollutant-to-AQI relationships are non-linear and interact with each other (PM2.5 matters more when NO₂ is also high, for instance), individual trees can overfit noisy sensor readings, but averaging many imperfect trees cancels out that noise while keeping the non-linear pattern. It also comes with a useful side effect — the model can report which pollutants it actually leaned on, shown in the <a href="#performance" style="color:var(--sky-clear-soft);border-bottom:1px dotted var(--sky-clear-soft);">feature importance</a> breakdown below.
+    </div>
+
+    <div class="pollutant-grid reveal">
+      <div class="p-card"><div class="tag">PM2.5</div><div class="desc">Fine particulate matter under 2.5 micrometers — small enough to reach deep into the lungs and bloodstream. Usually the single biggest driver of AQI.</div></div>
+      <div class="p-card"><div class="tag">PM10</div><div class="desc">Coarser particles — dust, pollen, construction debris. Complements PM2.5 to capture the full particulate load in the air.</div></div>
+      <div class="p-card"><div class="tag">NO₂</div><div class="desc">Nitrogen dioxide from vehicle and industrial combustion. Reacts in sunlight to help form ground-level ozone.</div></div>
+      <div class="p-card"><div class="tag">SO₂</div><div class="desc">Sulfur dioxide from burning fossil fuels, especially coal and diesel. A respiratory irritant and precursor to fine sulfate particles.</div></div>
+      <div class="p-card"><div class="tag">CO</div><div class="desc">Carbon monoxide from incomplete combustion. Reduces how much oxygen the blood can carry, even at moderate concentrations.</div></div>
+      <div class="p-card"><div class="tag">O₃</div><div class="desc">Ground-level ozone — a secondary pollutant formed when NOx and other emissions react in sunlight. Tends to peak in the afternoon.</div></div>
+    </div>
+
+    <div class="scale-strip reveal">
+      <div class="scale-seg good">GOOD<span class="r">0–50</span></div>
+      <div class="scale-seg mod">MODERATE<span class="r">51–100</span></div>
+      <div class="scale-seg unh">UNHEALTHY<span class="r">101–200</span></div>
+      <div class="scale-seg haz">HAZARDOUS<span class="r">200+</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">Try It</div>
+      <h2>Set the pollutant levels, get a live AQI</h2>
+      <p>These sliders call your running prediction API directly. Adjust the readings and press predict.</p>
+    </div>
+
+    <div class="demo-panel reveal">
+      <div class="demo-controls">
+        <div class="field">
+          <div class="field-label"><span>PM2.5 <span class="unit">µg/m³</span></span><span class="field-val" data-val="pm25">55</span></div>
+          <input type="range" min="0" max="500" value="55" id="pm25" style="--fill:11%">
+        </div>
+        <div class="field">
+          <div class="field-label"><span>PM10 <span class="unit">µg/m³</span></span><span class="field-val" data-val="pm10">80</span></div>
+          <input type="range" min="0" max="600" value="80" id="pm10" style="--fill:13%">
+        </div>
+        <div class="field">
+          <div class="field-label"><span>NO₂ <span class="unit">ppb</span></span><span class="field-val" data-val="no2">30</span></div>
+          <input type="range" min="0" max="200" value="30" id="no2" style="--fill:15%">
+        </div>
+        <div class="field">
+          <div class="field-label"><span>SO₂ <span class="unit">ppb</span></span><span class="field-val" data-val="so2">12</span></div>
+          <input type="range" min="0" max="200" value="12" id="so2" style="--fill:6%">
+        </div>
+        <div class="field">
+          <div class="field-label"><span>CO <span class="unit">ppm</span></span><span class="field-val" data-val="co">0.8</span></div>
+          <input type="range" min="0" max="15" step="0.1" value="0.8" id="co" style="--fill:5%">
+        </div>
+        <div class="field">
+          <div class="field-label"><span>O₃ <span class="unit">ppb</span></span><span class="field-val" data-val="o3">40</span></div>
+          <input type="range" min="0" max="300" value="40" id="o3" style="--fill:13%">
+        </div>
+
+        <button class="predict-btn" id="predictBtn">
+          <span class="spinner"></span>
+          <span class="btn-label">Predict AQI</span>
+        </button>
+        <div class="api-note" id="apiNote">Calling <span style="color:var(--sky-clear-soft)">POST /predict</span> on <span id="apiBaseLabel">http://127.0.0.1:5000</span></div>
+      </div>
+
+      <div class="demo-visual">
+        <div class="gauge-wrap">
+          <div class="gauge">
+            <svg viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="52" fill="none" stroke="var(--line-strong)" stroke-width="10"/>
+              <circle id="gaugeArc" cx="60" cy="60" r="52" fill="none" stroke="#4FB4E8" stroke-width="10" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="245"/>
+            </svg>
+            <div class="gauge-num">
+              <span class="n" id="gaugeNum">—</span>
+              <span class="l">Predicted AQI</span>
+            </div>
+          </div>
+          <div class="gauge-cat" id="gaugeCat">Awaiting input</div>
+          <div class="legend">
+            <span><i style="background:#4FB4E8"></i>Good</span>
+            <span><i style="background:#8ED2F0"></i>Moderate</span>
+            <span><i style="background:#E2A03F"></i>Unhealthy</span>
+            <span><i style="background:#D6584A"></i>Hazardous</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="performance">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">Performance</div>
+      <h2>How the model scores</h2>
+      <p>Evaluated on a held-out test split after training the Random Forest Regressor.</p>
+    </div>
+
+    <div class="stats reveal">
+      <div class="stat"><div class="n" data-count="0.94">0</div><div class="l">R² Score</div></div>
+      <div class="stat"><div class="n" data-count="14.8">0</div><div class="l">Mean Absolute Error</div></div>
+      <div class="stat"><div class="n" data-count="6">0</div><div class="l">Input features</div></div>
+      <div class="stat"><div class="n" data-count="3">0</div><div class="l">API endpoints</div></div>
+    </div>
+
+    <div class="section-head reveal" style="margin-bottom:36px;">
+      <div class="kicker">Feature Importance</div>
+      <h2 style="font-size:26px;">Which pollutants drive the prediction</h2>
+    </div>
+    <div class="importance reveal">
+      <div class="imp-row"><span class="name">PM2.5</span><div class="imp-track"><div class="imp-fill" data-pct="88"></div></div><span class="pct">88%</span></div>
+      <div class="imp-row"><span class="name">PM10</span><div class="imp-track"><div class="imp-fill" data-pct="74"></div></div><span class="pct">74%</span></div>
+      <div class="imp-row"><span class="name">NO₂</span><div class="imp-track"><div class="imp-fill" data-pct="52"></div></div><span class="pct">52%</span></div>
+      <div class="imp-row"><span class="name">O₃</span><div class="imp-track"><div class="imp-fill" data-pct="41"></div></div><span class="pct">41%</span></div>
+      <div class="imp-row"><span class="name">CO</span><div class="imp-track"><div class="imp-fill" data-pct="33"></div></div><span class="pct">33%</span></div>
+      <div class="imp-row"><span class="name">SO₂</span><div class="imp-track"><div class="imp-fill" data-pct="27"></div></div><span class="pct">27%</span></div>
+    </div>
+    <p class="imp-note">Illustrative — replace with your model's real feature importance output.</p>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="kicker">Built With</div>
+      <h2>Tech stack</h2>
+    </div>
+    <div class="stack-strip reveal">
+      <span class="stack-chip">Python</span>
+      <span class="stack-chip">Pandas</span>
+      <span class="stack-chip">NumPy</span>
+      <span class="stack-chip">Scikit-learn</span>
+      <span class="stack-chip">Matplotlib</span>
+      <span class="stack-chip">Flask</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-row">
+      <div class="brand"><span class="brand-mark"></span>AeroSense</div>
+      <div class="links">
+        <a href="#demo">Live demo</a>
+        <a href="#theory">Theory</a>
+        <a href="#performance">Model performance</a>
+      </div>
+    </div>
+    <div class="fine">Air Quality Prediction · Random Forest Regressor</div>
+  </div>
+</footer>
+
+<script>
+/* ============ CONFIG — edit this to match your deployment ============ */
+const API_BASE = ""; // change to your Flask server's origin
+document.getElementById('apiBaseLabel').textContent = API_BASE;
+
+/* ============ THEME TOGGLE ============ */
+const root = document.documentElement;
+const themeToggle = document.getElementById('themeToggle');
+const themeIcon = document.getElementById('themeIcon');
+const sunPath = '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.5M12 19v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M2.5 12h2.5M19 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/>';
+const moonPath = '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 6.8 6.8 0 0 0 20 14.5Z"/>';
+function paintIcon(){ themeIcon.innerHTML = root.getAttribute('data-theme') === 'light' ? sunPath : moonPath; }
+paintIcon();
+themeToggle.addEventListener('click', () => {
+  const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  root.setAttribute('data-theme', next);
+  paintIcon();
+});
+
+/* ============ NAV SCROLL STATE ============ */
+const header = document.getElementById('siteHeader');
+window.addEventListener('scroll', () => {
+  header.classList.toggle('scrolled', window.scrollY > 20);
+}, {passive:true});
+
+/* ============ SCROLL REVEAL ============ */
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+}, {threshold:0.15});
+revealEls.forEach(el => io.observe(el));
+
+/* ============ IMPORTANCE BARS + STAT COUNT-UP ANIMATE WHEN VISIBLE ============ */
+const impSection = document.querySelector('.importance');
+const impIO = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting){
+      document.querySelectorAll('.imp-fill').forEach(bar => { bar.style.width = bar.dataset.pct + '%'; });
+      impIO.disconnect();
+    }
+  });
+}, {threshold:0.3});
+if(impSection) impIO.observe(impSection);
+
+const statsSection = document.querySelector('.stats');
+const statIO = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting){
+      document.querySelectorAll('.stat .n').forEach(el => {
+        const target = parseFloat(el.dataset.count);
+        const decimals = el.dataset.count.includes('.') ? 1 : 0;
+        let start = null;
+        const dur = 1200;
+        function step(ts){
+          if(!start) start = ts;
+          const t = Math.min(1, (ts-start)/dur);
+          const eased = 1 - Math.pow(1-t,3);
+          el.textContent = (target*eased).toFixed(decimals);
+          if(t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      });
+      statIO.disconnect();
+    }
+  });
+}, {threshold:0.3});
+if(statsSection) statIO.observe(statsSection);
+
+/* ============ ATMOSPHERE PARTICLE FIELD (with constellation links) ============ */
+const canvas = document.getElementById('atmosphere');
+const ctx = canvas.getContext('2d');
+let W, H, particles = [];
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let haze = 0.18;
+let targetHaze = 0.18;
+
+function resize(){
+  W = canvas.width = canvas.offsetWidth * devicePixelRatio;
+  H = canvas.height = canvas.offsetHeight * devicePixelRatio;
+}
+function initParticles(){
+  const count = Math.min(90, Math.floor((canvas.offsetWidth * canvas.offsetHeight) / 13000));
+  particles = Array.from({length:count}, () => ({
+    x: Math.random()*W, y: Math.random()*H,
+    r: (Math.random()*1.6 + 0.6) * devicePixelRatio,
+    vx: (Math.random()-0.5)*0.15, vy: (Math.random()-0.5)*0.1,
+    o: Math.random()*0.5+0.2
+  }));
+}
+function hazeColor(h){
+  const c1 = [79,180,232], c2 = [226,160,63], c3 = [214,88,74];
+  let a,b,t;
+  if(h < 0.5){ a=c1; b=c2; t=h/0.5; } else { a=c2; b=c3; t=(h-0.5)/0.5; }
+  return a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+}
+const linkDist = 130 * devicePixelRatio;
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const col = hazeColor(haze);
+
+  const grad = ctx.createRadialGradient(W*0.75, H*0.15, 0, W*0.75, H*0.15, W*0.9);
+  grad.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]}, ${0.16 + haze*0.10})`);
+  grad.addColorStop(1, 'rgba(7,19,32,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  for(let i=0;i<particles.length;i++){
+    const p = particles[i];
+    p.x += p.vx + haze*0.25; p.y += p.vy;
+    if(p.x > W+10) p.x = -10; if(p.x < -10) p.x = W+10;
+    if(p.y > H+10) p.y = -10; if(p.y < -10) p.y = H+10;
+
+    for(let j=i+1;j<particles.length;j++){
+      const q = particles[j];
+      const dx = p.x-q.x, dy = p.y-q.y;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if(d < linkDist){
+        ctx.beginPath();
+        ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y);
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]}, ${(1-d/linkDist)*0.12})`;
+        ctx.lineWidth = devicePixelRatio*0.6;
+        ctx.stroke();
+      }
+    }
+  }
+  particles.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * (1 + haze*1.4), 0, Math.PI*2);
+    ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]}, ${p.o * (0.4 + haze*0.6)})`;
+    ctx.fill();
+  });
+
+  haze += (targetHaze - haze) * 0.02;
+  if(!reduceMotion) requestAnimationFrame(draw);
+}
+window.addEventListener('resize', () => { resize(); initParticles(); });
+resize(); initParticles(); draw();
+
+/* ambient demo cycle for hero readout, independent of the real predictor below */
+const ambientReadout = document.getElementById('ambientReadout');
+let ambientAqi = 42;
+setInterval(() => {
+  ambientAqi = Math.max(15, Math.min(190, ambientAqi + (Math.random()-0.5)*22));
+  ambientReadout.textContent = Math.round(ambientAqi);
+  targetHaze = Math.min(1, ambientAqi/220);
+}, 2600);
+
+/* ============ DEMO CONTROLS ============ */
+const sliderIds = ['pm25','pm10','no2','so2','co','o3'];
+const apiKeyMap = { pm25:'PM2.5', pm10:'PM10', no2:'NO2', so2:'SO2', co:'CO', o3:'O3' };
+
+sliderIds.forEach(id => {
+  const el = document.getElementById(id);
+  const readout = document.querySelector(`[data-val="${id}"]`);
+  const update = () => {
+    readout.textContent = el.value;
+    const pct = ((el.value - el.min) / (el.max - el.min)) * 100;
+    el.style.setProperty('--fill', pct + '%');
+  };
+  el.addEventListener('input', update);
+  update();
+});
+
+function categoryFor(aqi){
+  if(aqi <= 50)  return {label:'Good', color:getComputedStyle(root).getPropertyValue('--sky-clear').trim()};
+  if(aqi <= 100) return {label:'Moderate', color:getComputedStyle(root).getPropertyValue('--sky-clear-soft').trim()};
+  if(aqi <= 200) return {label:'Unhealthy', color:getComputedStyle(root).getPropertyValue('--haze-amber').trim()};
+  return {label:'Hazardous', color:getComputedStyle(root).getPropertyValue('--smog-red').trim()};
+}
+
+function animateGauge(value){
+  const gaugeNum = document.getElementById('gaugeNum');
+  const gaugeCat = document.getElementById('gaugeCat');
+  const arc = document.getElementById('gaugeArc');
+  const circumference = 326.7;
+  const pct = Math.max(0, Math.min(1, value / 300));
+  const cat = categoryFor(value);
+
+  let start = 0, startVal = 0;
+  const dur = 900;
+  function step(ts){
+    if(!start) start = ts;
+    const t = Math.min(1, (ts - start) / dur);
+    const eased = 1 - Math.pow(1-t, 3);
+    const current = Math.round(startVal + (value - startVal) * eased);
+    gaugeNum.textContent = current;
+    arc.setAttribute('stroke-dashoffset', circumference * (1 - pct*eased));
+    if(t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+
+  gaugeNum.style.color = cat.color;
+  arc.setAttribute('stroke', cat.color);
+  gaugeCat.textContent = cat.label;
+  gaugeCat.style.color = cat.color;
+  gaugeCat.style.borderColor = cat.color;
+
+  targetHaze = Math.min(1, value/220);
+}
+
+const predictBtn = document.getElementById('predictBtn');
+const apiNote = document.getElementById('apiNote');
+
+predictBtn.addEventListener('click', async () => {
+  const payload = {};
+  sliderIds.forEach(id => { payload[apiKeyMap[id]] = parseFloat(document.getElementById(id).value); });
+
+  predictBtn.disabled = true;
+  predictBtn.classList.add('loading');
+  apiNote.classList.remove('err');
+  apiNote.textContent = 'Requesting prediction…';
+
+  try{
+    const res = await fetch(`${API_BASE}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+
+    animateGauge(data.Predicted_AQI);
+    apiNote.textContent = `Predicted AQI: ${data.Predicted_AQI} · from ${API_BASE}/predict`;
+  }catch(err){
+    apiNote.classList.add('err');
+    apiNote.textContent = `Couldn't reach the API — ${err.message}. Check API_BASE and CORS.`;
+  }finally{
+    predictBtn.disabled = false;
+    predictBtn.classList.remove('loading');
+  }
+});
+</script>
+</body>
+</html>
